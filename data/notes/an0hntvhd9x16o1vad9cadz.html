@@ -1,0 +1,65 @@
+<h1 id="database"><a aria-hidden="true" class="anchor-heading" href="#database"><svg aria-hidden="true" viewBox="0 0 16 16"><use xlink:href="#svg-link"></use></svg></a>Database</h1>
+<h3 id="to-research"><a aria-hidden="true" class="anchor-heading" href="#to-research"><svg aria-hidden="true" viewBox="0 0 16 16"><use xlink:href="#svg-link"></use></svg></a>to research</h3>
+<ul>
+<li>SQLOS Cooperative scheduling vs. Win preemptive scheduling</li>
+</ul>
+<h3 id="mcsa-70765"><a aria-hidden="true" class="anchor-heading" href="#mcsa-70765"><svg aria-hidden="true" viewBox="0 0 16 16"><use xlink:href="#svg-link"></use></svg></a>mcsa 70/765</h3>
+<h3 id="troubleshooting"><a aria-hidden="true" class="anchor-heading" href="#troubleshooting"><svg aria-hidden="true" viewBox="0 0 16 16"><use xlink:href="#svg-link"></use></svg></a>troubleshooting</h3>
+<p><a aria-hidden="true" class="block-anchor anchor-heading" id="^k7i59zrcxn1o" href="#^k7i59zrcxn1o"><svg viewBox="0 0 16 16"><use xlink:href="#svg-link"></use></svg></a><a href="https://assets.red-gate.com/community/books/troubleshooting-sql-server-accidental-dba.pdf">troublshoooting sql server</a>   Zusammenfassung  </p>
+<p>If you collect and examine individually five separate pieces of performance data, it's
+possible that each could send you down a separate path. Viewed as a group, they will
+likely lead you down the sixth, and correct, path to resolving the issue. If there is one
+take-away from this chapter, as well as this book, it should be that focusing on a single
+piece of information alone can often lead to an incorrect diagnosis of a problem.  </p>
+<h4 id="defining-a-troubleshooting-methodology"><a aria-hidden="true" class="anchor-heading" href="#defining-a-troubleshooting-methodology"><svg aria-hidden="true" viewBox="0 0 16 16"><use xlink:href="#svg-link"></use></svg></a>Defining a Troubleshooting Methodology</h4>
+<p>Fairly early on in any analysis, I'll take a look at the wait statistics, in the sys.dm<em>os</em>
+wait_stats Dynamic Management View (DMV), to identify any major resource waits in
+the system, at the operating system level.  </p>
+<h4 id="wait-statistics-the-basis-for-troubleshooting"><a aria-hidden="true" class="anchor-heading" href="#wait-statistics-the-basis-for-troubleshooting"><svg aria-hidden="true" viewBox="0 0 16 16"><use xlink:href="#svg-link"></use></svg></a>Wait Statistics: the Basis for Troubleshooting</h4>
+<p>As a part of the normal operations of SQL Server, a number of wait conditions exist
+which are non-problematic in nature and generally expected on the server. These wait
+conditions can generally be queried from the sys.dm_os_waiting_tasks DMV for the
+system sessions.</p>
+<pre class="language-sql"><code class="language-SQL"><span class="token keyword">SELECT</span> <span class="token keyword">DISTINCT</span>
+     wt<span class="token punctuation">.</span>wait_type
+<span class="token keyword">FROM</span> sys<span class="token punctuation">.</span>dm_os_waiting_tasks <span class="token keyword">AS</span> wt
+<span class="token keyword">JOIN</span> sys<span class="token punctuation">.</span>dm_exec_sessions <span class="token keyword">AS</span> s <span class="token keyword">ON</span> wt<span class="token punctuation">.</span>session_id <span class="token operator">=</span> s<span class="token punctuation">.</span>session_id
+<span class="token keyword">WHERE</span> s<span class="token punctuation">.</span>is_user_process <span class="token operator">=</span> <span class="token number">0</span>
+</code></pre>
+<p>When looking at the wait statistics being tracked by SQL Server, it's important that these
+wait types are eliminated from the analysis, allowing the more problematic waits in the
+system to be identified. One of the things I do as a part of tracking wait information is to
+maintain a script that filters out the non-problematic wait types.</p>
+<pre class="language-sql"><code class="language-SQL"><span class="token keyword">SELECT</span> <span class="token keyword">TOP</span> <span class="token number">10</span>
+wait_type <span class="token punctuation">,</span>
+max_wait_time_ms wait_time_ms <span class="token punctuation">,</span>
+signal_wait_time_ms <span class="token punctuation">,</span>
+wait_time_ms <span class="token operator">-</span> signal_wait_time_ms <span class="token keyword">AS</span> resource_wait_time_ms <span class="token punctuation">,</span>
+<span class="token number">100.0</span> <span class="token operator">*</span> wait_time_ms <span class="token operator">/</span> <span class="token function">SUM</span><span class="token punctuation">(</span>wait_time_ms<span class="token punctuation">)</span> <span class="token keyword">OVER</span> <span class="token punctuation">(</span> <span class="token punctuation">)</span>
+<span class="token keyword">AS</span> percent_total_waits <span class="token punctuation">,</span>
+<span class="token number">100.0</span> <span class="token operator">*</span> signal_wait_time_ms <span class="token operator">/</span> <span class="token function">SUM</span><span class="token punctuation">(</span>signal_wait_time_ms<span class="token punctuation">)</span> <span class="token keyword">OVER</span> <span class="token punctuation">(</span> <span class="token punctuation">)</span>
+<span class="token keyword">AS</span> percent_total_signal_waits <span class="token punctuation">,</span>
+<span class="token number">100.0</span> <span class="token operator">*</span> <span class="token punctuation">(</span> wait_time_ms <span class="token operator">-</span> signal_wait_time_ms <span class="token punctuation">)</span>
+<span class="token operator">/</span> <span class="token function">SUM</span><span class="token punctuation">(</span>wait_time_ms<span class="token punctuation">)</span> <span class="token keyword">OVER</span> <span class="token punctuation">(</span> <span class="token punctuation">)</span> <span class="token keyword">AS</span> percent_total_resource_waits
+<span class="token keyword">FROM</span> sys<span class="token punctuation">.</span>dm_os_wait_stats
+<span class="token keyword">WHERE</span> wait_time_ms <span class="token operator">></span> <span class="token number">0</span> <span class="token comment">-- remove zero wait_time</span>
+<span class="token operator">AND</span> wait_type <span class="token operator">NOT</span> <span class="token operator">IN</span> <span class="token comment">-- filter out additional irrelevant waits</span>
+<span class="token punctuation">(</span> <span class="token string">'SLEEP_TASK'</span><span class="token punctuation">,</span> <span class="token string">'BROKER_TASK_STOP'</span><span class="token punctuation">,</span> <span class="token string">'BROKER_TO_FLUSH'</span><span class="token punctuation">,</span>
+<span class="token string">'SQLTRACE_BUFFER_FLUSH'</span><span class="token punctuation">,</span><span class="token string">'CLR_AUTO_EVENT'</span><span class="token punctuation">,</span> <span class="token string">'CLR_MANUAL_EVENT'</span><span class="token punctuation">,</span>
+<span class="token string">'LAZYWRITER_SLEEP'</span><span class="token punctuation">,</span> <span class="token string">'SLEEP_SYSTEMTASK'</span><span class="token punctuation">,</span> <span class="token string">'SLEEP_BPOOL_FLUSH'</span><span class="token punctuation">,</span>
+<span class="token string">'BROKER_EVENTHANDLER'</span><span class="token punctuation">,</span> <span class="token string">'XE_DISPATCHER_WAIT'</span><span class="token punctuation">,</span> <span class="token string">'FT_IFTSHC_MUTEX'</span><span class="token punctuation">,</span>
+<span class="token string">'CHECKPOINT_QUEUE'</span><span class="token punctuation">,</span> <span class="token string">'FT_IFTS_SCHEDULER_IDLE_WAIT'</span><span class="token punctuation">,</span>
+<span class="token string">'BROKER_TRANSMITTER'</span><span class="token punctuation">,</span> <span class="token string">'FT_IFTSHC_MUTEX'</span><span class="token punctuation">,</span> <span class="token string">'KSOURCE_WAKEUP'</span><span class="token punctuation">,</span>
+<span class="token string">'LOGMGR_QUEUE'</span><span class="token punctuation">,</span> <span class="token string">'ONDEMAND_TASK_QUEUE'</span><span class="token punctuation">,</span>
+<span class="token string">'REQUEST_FOR_DEADLOCK_SEARCH'</span><span class="token punctuation">,</span> <span class="token string">'XE_TIMER_EVENT'</span><span class="token punctuation">,</span> <span class="token string">'BAD_PAGE_PROCESS'</span><span class="token punctuation">,</span>
+<span class="token string">'DBMIRROR_EVENTS_QUEUE'</span><span class="token punctuation">,</span> <span class="token string">'BROKER_RECEIVE_WAITFOR'</span><span class="token punctuation">,</span>
+<span class="token string">'PREEMPTIVE_OS_GETPROCADDRESS'</span><span class="token punctuation">,</span> <span class="token string">'PREEMPTIVE_OS_AUTHENTICATIONOPS'</span><span class="token punctuation">,</span>
+<span class="token string">'WAITFOR'</span><span class="token punctuation">,</span> <span class="token string">'DISPATCHER_QUEUE_SEMAPHORE'</span><span class="token punctuation">,</span> <span class="token string">'XE_DISPATCHER_JOIN'</span><span class="token punctuation">,</span>
+<span class="token string">'RESOURCE_QUEUE'</span> <span class="token punctuation">)</span>
+<span class="token keyword">ORDER</span> <span class="token keyword">BY</span> wait_time_ms <span class="token keyword">DESC</span>
+</code></pre>
+<hr>
+<strong>Backlinks</strong>
+<ul>
+<li><a href="/notes/2k812e4aq0ftz78t9s67g81">Books</a></li>
+</ul>
