@@ -2,13 +2,14 @@
 id: csenxo34xplqxwt30i5tqp2
 title: Root
 desc: ''
-updated: 1645717922056
+updated: 1645719790962
 created: 1645717922056
 ---
-# Welcome to Dendron
+# About Me
 
-This is the root of your dendron vault. If you decide to publish your entire vault, this will be your landing page. You are free to customize any part of this page except the frontmatter on top.
 
+## Projects
+Just some content
 ## Lookup
 
 This section contains useful links to related resources.
