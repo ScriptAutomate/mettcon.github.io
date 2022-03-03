@@ -18,6 +18,6 @@
   },
   "homepage": "https://github.com/Mettcon/mettcon.github.io#readme",
   "dependencies": {
-    "@dendronhq/dendron-cli": "^0.83.0"
+    "@dendronhq/dendron-cli": "^0.84.0"
   }
 }
