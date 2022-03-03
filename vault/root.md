@@ -2,9 +2,10 @@
 id: csenxo34xplqxwt30i5tqp2
 title: Root
 desc: ''
-updated: 1645719790962
+updated: 1645781175268
 created: 1645717922056
 ---
+Amoeba pattern for everything
 # About Me
 
 

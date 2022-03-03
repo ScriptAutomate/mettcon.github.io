@@ -2,8 +2,9 @@
 id: an0hntvhd9x16o1vad9cadz
 title: Database
 desc: ''
-updated: 1645720042157
+updated: 1646216558575
 created: 1645719623400
+stub: false
 ---
 
 ### to research
@@ -12,9 +13,10 @@ created: 1645719623400
 ###  mcsa 70/765
 
 
+
 ### troubleshooting
-[troublshoooting sql server](https://assets.red-gate.com/community/books/troubleshooting-sql-server-accidental-dba.pdf)   ^k7i59zrcxn1o
-Zusammenfassung  
+[troublshoooting sql server](https://assets.red-gate.com/community/books/troubleshooting-sql--accidental-dba.pdf)   ^k7i59zrcxn1o
+Zusammenfassung  server
 
 If you collect and examine individually five separate pieces of performance data, it's
 possible that each could send you down a separate path. Viewed as a group, they will
@@ -22,57 +24,108 @@ likely lead you down the sixth, and correct, path to resolving the issue. If the
 take-away from this chapter, as well as this book, it should be that focusing on a single
 piece of information alone can often lead to an incorrect diagnosis of a problem.  
 
+<!-- Insert explanation about timespans of Statistics to analyze -->
 #### Defining a Troubleshooting Methodology
 Fairly early on in any analysis, I'll take a look at the wait statistics, in the sys.dm_os_
 wait_stats Dynamic Management View (DMV), to identify any major resource waits in
 the system, at the operating system level.  
 
-#### Wait Statistics: the Basis for Troubleshooting
-As a part of the normal operations of SQL Server, a number of wait conditions exist
-which are non-problematic in nature and generally expected on the server. These wait
-conditions can generally be queried from the sys.dm_os_waiting_tasks DMV for the
-system sessions.
+
+
+
+
+
+##### Performance Counters
+One of the challenges with querying the raw performance counter data directly is that
+some of the performance counters are cumulative ones, increasing in value as time
+progresses, and analysis of the data requires capturing two snapshots of the data and then
+calculating the difference between the snapshots. The query in Listing 1.5 performs the
+snapshots and calculations automatically, allowing the output to be analyzed directly.
+There are other performance counters, not considered in Listing 1.5, which have a 32
+secondary, associated base counter by which the main counter has to be divided to arrive
+at its actual value.
 
 ```SQL
-SELECT DISTINCT
-     wt.wait_type
-FROM sys.dm_os_waiting_tasks AS wt
-JOIN sys.dm_exec_sessions AS s ON wt.session_id = s.session_id
-WHERE s.is_user_process = 0
-```
+DECLARE @CounterPrefix NVARCHAR(30)
+SET @CounterPrefix = CASE WHEN @@SERVICENAME = 'MSSQLSERVER'
+                              THEN 'SQLServer:'
+                          ELSE 'MSSQL$' + @@SERVICENAME + ':'
+                     END ;
+-- Capture the first counter set
+SELECT CAST(1 AS INT) AS collection_instance ,
+     [OBJECT_NAME] ,
+     counter_name ,
+     instance_name ,
+     cntr_value ,
+     cntr_type ,
+     CURRENT_TIMESTAMP AS collection_time
+INTO #perf_counters_init
+FROM sys.dm_os_performance_counters
+WHERE ( OBJECT_NAME = @CounterPrefix + 'Access Methods'
+     AND counter_name = 'Full Scans/sec'
+     )
+     OR ( OBJECT_NAME = @CounterPrefix + 'Access Methods'
+     AND counter_name = 'Index Searches/sec'
+     )
+     OR ( OBJECT_NAME = @CounterPrefix + 'Buffer Manager'
+     AND counter_name = 'Lazy Writes/sec'
+     )
+     OR ( OBJECT_NAME = @CounterPrefix + 'Buffer Manager'
+     AND counter_name = 'Page life expectancy'
+     )
+     OR ( OBJECT_NAME = @CounterPrefix + 'General Statistics'
+     AND counter_name = 'Processes Blocked'
+     )
+     OR ( OBJECT_NAME = @CounterPrefix + 'General Statistics'
+     AND counter_name = 'User Connections'
+     )
+     OR ( OBJECT_NAME = @CounterPrefix + 'Locks'
+     AND counter_name = 'Lock Waits/sec'
+     )
+     OR ( OBJECT_NAME = @CounterPrefix + 'Locks'
+     AND counter_name = 'Lock Wait Time (ms)'
+     )
+     OR ( OBJECT_NAME = @CounterPrefix + 'SQL Statistics'
+AND counter_name = 'SQL Re-Compilations/sec'
+)
+OR ( OBJECT_NAME = @CounterPrefix + 'Memory Manager'
+AND counter_name = 'Memory Grants Pending'
+)
+OR ( OBJECT_NAME = @CounterPrefix + 'SQL Statistics'
+AND counter_name = 'Batch Requests/sec'
+)
+OR ( OBJECT_NAME = @CounterPrefix + 'SQL Statistics'
+AND counter_name = 'SQL Compilations/sec'
+)
 
-When looking at the wait statistics being tracked by SQL Server, it's important that these
-wait types are eliminated from the analysis, allowing the more problematic waits in the
-system to be identified. One of the things I do as a part of tracking wait information is to
-maintain a script that filters out the non-problematic wait types.
+-- Wait on Second between data collection
+WAITFOR DELAY '00:00:01'
 
-```SQL
-SELECT TOP 10
-wait_type ,
-max_wait_time_ms wait_time_ms ,
-signal_wait_time_ms ,
-wait_time_ms - signal_wait_time_ms AS resource_wait_time_ms ,
-100.0 * wait_time_ms / SUM(wait_time_ms) OVER ( )
-AS percent_total_waits ,
-100.0 * signal_wait_time_ms / SUM(signal_wait_time_ms) OVER ( )
-AS percent_total_signal_waits ,
-100.0 * ( wait_time_ms - signal_wait_time_ms )
-/ SUM(wait_time_ms) OVER ( ) AS percent_total_resource_waits
-FROM sys.dm_os_wait_stats
-WHERE wait_time_ms > 0 -- remove zero wait_time
-AND wait_type NOT IN -- filter out additional irrelevant waits
-( 'SLEEP_TASK', 'BROKER_TASK_STOP', 'BROKER_TO_FLUSH',
-'SQLTRACE_BUFFER_FLUSH','CLR_AUTO_EVENT', 'CLR_MANUAL_EVENT',
-'LAZYWRITER_SLEEP', 'SLEEP_SYSTEMTASK', 'SLEEP_BPOOL_FLUSH',
-'BROKER_EVENTHANDLER', 'XE_DISPATCHER_WAIT', 'FT_IFTSHC_MUTEX',
-'CHECKPOINT_QUEUE', 'FT_IFTS_SCHEDULER_IDLE_WAIT',
-'BROKER_TRANSMITTER', 'FT_IFTSHC_MUTEX', 'KSOURCE_WAKEUP',
-'LOGMGR_QUEUE', 'ONDEMAND_TASK_QUEUE',
-'REQUEST_FOR_DEADLOCK_SEARCH', 'XE_TIMER_EVENT', 'BAD_PAGE_PROCESS',
-'DBMIRROR_EVENTS_QUEUE', 'BROKER_RECEIVE_WAITFOR',
-'PREEMPTIVE_OS_GETPROCADDRESS', 'PREEMPTIVE_OS_AUTHENTICATIONOPS',
-'WAITFOR', 'DISPATCHER_QUEUE_SEMAPHORE', 'XE_DISPATCHER_JOIN',
-'RESOURCE_QUEUE' )
-ORDER BY wait_time_ms DESC
-```
-
+-- Capture the second counter set
+SELECT    CAST(2 AS INT) AS collection_instance ,
+          OBJECT_NAME ,
+          counter_name ,
+          instance_name ,
+          cntr_value ,
+          cntr_type ,
+          CURRENT_TIMESTAMP AS collection_time
+INTO    #perf_counters_second
+FROM      sys.dm_os_performance_counters
+WHERE     ( OBJECT_NAME = @CounterPrefix + 'Access Methods'
+          AND counter_name = 'Full Scans/sec'
+          )
+          OR ( OBJECT_NAME = @CounterPrefix + 'Access Methods'
+          AND counter_name = 'Index Searches/sec'
+          )
+          OR ( OBJECT_NAME = @CounterPrefix + 'Buffer Manager'
+          AND counter_name = 'Lazy Writes/sec'
+          )
+          OR ( OBJECT_NAME = @CounterPrefix + 'Buffer Manager'
+          AND counter_name = 'Page life expectancy'
+          )
+          OR ( OBJECT_NAME = @CounterPrefix + 'General Statistics'
+          AND counter_name = 'Processes Blocked'
+          )
+          OR ( OBJECT_NAME = @CounterPrefix + 'General Statistics'
+          AND counter_name = 'User Connections'
+          )
