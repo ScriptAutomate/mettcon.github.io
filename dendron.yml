@@ -82,9 +82,10 @@ publishing:
         - root
     writeStubs: false
     siteRootDir: docs
+    siteUrl: 'https://mettcon.github.io'
     seo:
-        title: Dendron
-        description: Personal Knowledge Space
+        title: Mettcon's Digital Garden
+        description: Mettcon's Personal Knowledge Space
     github:
         enableEditLink: true
         editLinkText: Edit this page on GitHub
